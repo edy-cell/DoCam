@@ -112,3 +112,35 @@ Académica. Permite medir qué aporta cada etapa al OCR. Por ejemplo, se puede c
 ## 5. LINK GITHUB
 
 [https://github.com/edy-cell/DoCam](https://github.com/edy-cell/DoCam)
+
+---
+
+## 6. GUÍA DE EJECUCIÓN DE LA INTERFAZ GRÁFICA (GUI)
+
+La aplicación cuenta con una interfaz gráfica profesional de alta definición, diseñada para ejecutarse en **Pantalla Completa** y con diseño centrado y modular:
+
+### Ejecución rápida:
+```bash
+python main.py
+```
+*(O desde la carpeta interna `DoCam/`: `python DoCam/main.py`)*
+
+### Características y Fases implementadas:
+1. **Pantalla Completa Automática**: Se inicia maximizada/centrada (`F11` para alternar modo pantalla completa inmersiva, `Esc` para salir).
+2. **Separación de Fases por Botones**:
+   - **📂 Abrir Fotografía / Muestras Rápidas**: Carga archivos locales o selecciona directamente los casos de prueba de las carpetas `Imagenes/Edy` e `Imagenes/Ivan`.
+   - **📐 FASE 1: Corrección de Perspectiva**: Detección automática de contorno cuadrangular de 4 vértices con ajuste interactivo de esquinas (arrastre con mouse) y transformación de homografía.
+   - **🌓 FASE 2: Escala de Grises y CLAHE**: Ecualización adaptativa con limitación de contraste local (calibración en tiempo real de `clipLimit` y `tileGridSize`).
+   - **🧹 FASE 3: Filtrado de Ruido y Restauración de Wiener**: Incluye el **Filtro de Wiener en frecuencia (FFT 2D)** basado en el modelo de degradación $g = h * f + n$ con fórmula $F(u,v) = \left[ \frac{H^*(u,v)}{|H(u,v)|^2 + K} \right] \cdot G(u,v)$ con ajuste dinámico del parámetro $K$ (relación ruido/señal NSR), tamaño de PSF y dispersión $\sigma$, junto a filtros Bilateral, Gaussiano y Mediana.
+   - **⚡ FASE 4: Umbralización Adaptativa**: Eliminación de sombras e iluminación desigual mediante algoritmos de Sauvola, Gaussiano Adaptativo, Media Adaptativa y Otsu.
+   - **🔄 FASE 5: Corrección de Inclinación (Deskew)**: Detección angular precisa por Transformada de Hough y rotación con fondo blanco.
+   - **🚀 Flujo Completo Automático**: Ejecución integral de las 5 fases en un solo clic.
+3. **Pestañas de Análisis e Insumo para Tesis**:
+   - **👁️ Comparación Lado a Lado**: Visor dual con zoom interactivo (rueda del mouse o botones `+` / `-`) y paneo (arrastre).
+   - **📈 Histogramas Radiométricos**: Gráficas de densidad de niveles de gris (original vs procesado) generadas en tiempo real con Matplotlib.
+   - **📊 Matriz de Métricas Visuales**: Cuantificación de Nitidez Laplaciana (Tenengrad), Contraste RMS, Contraste Michelson, SNR (dB) y porcentaje de cobertura de tinta con deltas de mejora.
+   - **🔤 Insumo para Tesis (OCR, CER & WER Automático)**: Reconocimiento **automático** del texto de la imagen del usuario (directamente sobre los píxeles mediante OCR óptico nativo o enlace a Tesseract), evaluación comparativa de las 4 etapas del problema (Sin procesar, Solo CLAHE, Solo Umbralización, Flujo Completo), cálculo dinámico de CER y WER mediante distancia Levenshtein con auto-población de Ground Truth.
+4. **Exportación Formal**:
+   - Guardado en alta resolución (PNG / JPG / TIFF).
+   - Generación de documento digitalizado en PDF tamaño A4 listo para archivo institucional.
+   - Generación de Informe Científico Académico en PDF con portada, parámetros, tablas de métricas y benchmark de OCR.
