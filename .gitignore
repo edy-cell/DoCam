@@ -1,1 +1,35 @@
+# Byte-compiled / cache de Python
 __pycache__/
+*.py[cod]
+*$py.class
+
+# Entornos virtuales
+venv/
+.venv/
+env/
+ENV/
+
+# Variables de entorno, credenciales y archivos sensibles
+.env
+*.env
+*.key
+*.pem
+*.secret
+*.token
+credentials.json
+
+# Configuraciones de IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Archivos de sistema operativo
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Archivos temporales o volcados de prueba
+*.tmp
+temp_*
+output_*.png

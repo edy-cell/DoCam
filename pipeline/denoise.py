@@ -110,10 +110,34 @@ def apply_bilateral_filter(image: np.ndarray, d: int = 9, sigma_color: float = 7
     return cv2.bilateralFilter(image, d=int(d), sigmaColor=float(sigma_color), sigmaSpace=float(sigma_space))
 
 
-def filter_noise(image: np.ndarray, method: str = "wiener", **kwargs) -> np.ndarray:
+def apply_fast_nl_means(image: np.ndarray, h: float = 10.0, template_window_size: int = 7, search_window_size: int = 21) -> np.ndarray:
+    """
+    Filtro Non-Local Means (fastNlMeansDenoising):
+    Compara parches de píxeles en toda la vecindad para suprimir el ruido gaussiano
+    y térmico del sensor de la cámara preservando micro-estructuras tipográficas.
+    """
+    if len(image.shape) == 3 and image.shape[2] >= 3:
+        return cv2.fastNlMeansDenoisingColored(
+            image, None,
+            h=float(h),
+            hColor=float(h),
+            templateWindowSize=int(template_window_size),
+            searchWindowSize=int(search_window_size)
+        )
+    else:
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
+        return cv2.fastNlMeansDenoising(
+            gray, None,
+            h=float(h),
+            templateWindowSize=int(template_window_size),
+            searchWindowSize=int(search_window_size)
+        )
+
+
+def filter_noise(image: np.ndarray, method: str = "bilateral", **kwargs) -> np.ndarray:
     """
     Selector unificado de filtrado de ruido.
-    Métodos: 'wiener', 'bilateral', 'gaussian', 'median', 'none'
+    Métodos: 'bilateral', 'nlm' (fastNlMeans), 'wiener', 'gaussian', 'median', 'none'
     """
     method = method.lower()
     if method == "wiener":
@@ -121,11 +145,14 @@ def filter_noise(image: np.ndarray, method: str = "wiener", **kwargs) -> np.ndar
         psf_sigma = kwargs.get("psf_sigma", 1.2)
         k = kwargs.get("k", 0.02)
         return apply_wiener_filter(image, psf_size=psf_size, psf_sigma=psf_sigma, k=k)
-    elif method == "bilateral":
+    elif method in ["bilateral", "bilateral_filter"]:
         d = kwargs.get("d", 7)
         sigma_color = kwargs.get("sigma_color", 50.0)
         sigma_space = kwargs.get("sigma_space", 50.0)
         return apply_bilateral_filter(image, d=d, sigma_color=sigma_color, sigma_space=sigma_space)
+    elif method in ["nlm", "fast_nl_means", "non_local_means"]:
+        h = kwargs.get("h", 10.0)
+        return apply_fast_nl_means(image, h=h)
     elif method == "gaussian":
         ksize = kwargs.get("ksize", 5)
         sigma = kwargs.get("sigma", 1.0)

@@ -34,6 +34,11 @@ class ZoomableImageCanvas(tk.Frame):
         self.selected_corner_idx: int | None = None
         self.handle_radius = 8
 
+        # Sincronización bidireccional de Zoom / Paneo con canvas par
+        self.peer_canvas: 'ZoomableImageCanvas' | None = None
+        self.sync_active: bool = True
+        self._is_syncing: bool = False
+
         self._build_header()
         self._build_canvas()
 
@@ -196,6 +201,57 @@ class ZoomableImageCanvas(tk.Frame):
             self.corners = None
         self._render()
 
+    def set_peer_canvas(self, peer: 'ZoomableImageCanvas'):
+        """Asocia un visor de imagen par para sincronizar Zoom y Paneo bidireccionalmente."""
+        self.peer_canvas = peer
+
+    def set_sync_active(self, active: bool):
+        """Activa o desactiva la sincronización con el visor par."""
+        self.sync_active = active
+
+    def _broadcast_view(self):
+        """Transmite el nivel de zoom y centro de paneo normalizado al visor par."""
+        if not self.peer_canvas or not self.sync_active or self._is_syncing:
+            return
+        if not self.pil_image or not self.peer_canvas.pil_image:
+            return
+
+        canvas_w = max(1, self.canvas.winfo_width())
+        canvas_h = max(1, self.canvas.winfo_height())
+        img_w, img_h = self.pil_image.size
+
+        # Zoom relativo al tamaño de encaje (fit scale)
+        fit_scale = min(canvas_w / img_w, canvas_h / img_h) * 0.95
+        rel_zoom = self.zoom_scale / max(1e-6, fit_scale)
+
+        # Centro de la vista normalizado en rango [0, 1] respecto a la imagen
+        center_img_x = ((canvas_w / 2.0) - self.pan_x) / max(1e-6, self.zoom_scale)
+        center_img_y = ((canvas_h / 2.0) - self.pan_y) / max(1e-6, self.zoom_scale)
+        norm_x = center_img_x / max(1.0, float(img_w))
+        norm_y = center_img_y / max(1.0, float(img_h))
+
+        self.peer_canvas.receive_sync_view(rel_zoom, norm_x, norm_y)
+
+    def receive_sync_view(self, rel_zoom: float, norm_x: float, norm_y: float):
+        """Recibe y aplica los valores de zoom y paneo sincronizados."""
+        if not self.pil_image:
+            return
+        self._is_syncing = True
+        try:
+            canvas_w = max(1, self.canvas.winfo_width())
+            canvas_h = max(1, self.canvas.winfo_height())
+            img_w, img_h = self.pil_image.size
+
+            peer_fit = min(canvas_w / img_w, canvas_h / img_h) * 0.95
+            self.zoom_scale = rel_zoom * peer_fit
+
+            # Reubicar coordenadas de paneo
+            self.pan_x = (canvas_w / 2.0) - (norm_x * img_w * self.zoom_scale)
+            self.pan_y = (canvas_h / 2.0) - (norm_y * img_h * self.zoom_scale)
+            self._render()
+        finally:
+            self._is_syncing = False
+
     def fit_to_canvas(self):
         """Ajusta la imagen para ocupar todo el canvas disponible manteniendo proporción."""
         if not self.pil_image:
@@ -220,6 +276,7 @@ class ZoomableImageCanvas(tk.Frame):
         self.pan_y = (canvas_h - scaled_h) // 2
 
         self._render()
+        self._broadcast_view()
 
     def zoom(self, factor: float):
         """Aplica zoom centrado en la vista."""
@@ -242,6 +299,7 @@ class ZoomableImageCanvas(tk.Frame):
         self.zoom_scale = new_scale
 
         self._render()
+        self._broadcast_view()
 
     def _on_resize(self, event):
         if self.pil_image and self.zoom_scale == 1.0:
@@ -306,6 +364,7 @@ class ZoomableImageCanvas(tk.Frame):
         self.drag_start_x = event.x
         self.drag_start_y = event.y
         self._render()
+        self._broadcast_view()
 
     def _on_button_release(self, event):
         self.selected_corner_idx = None

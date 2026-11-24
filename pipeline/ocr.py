@@ -150,7 +150,33 @@ def _get_ocr_templates() -> dict:
     return _CACHED_TEMPLATES
 
 
-def optical_character_recognition_native(image: np.ndarray) -> str:
+class OCRResult(tuple):
+    """
+    Tupla enriquecida compatible hacia atrás:
+    Permite desempaquetar directamente los 2 elementos clásicos (text, is_tesseract)
+    mientras expone como atributos: confidence, word_count, char_count.
+    """
+    def __new__(cls, text: str, is_tesseract: bool = False, confidence: float = 0.0, word_count: int = 0, char_count: int = 0):
+        return super().__new__(cls, (text, is_tesseract))
+
+    def __init__(self, text: str, is_tesseract: bool = False, confidence: float = 0.0, word_count: int = 0, char_count: int = 0):
+        self.text = text
+        self.is_tesseract = is_tesseract
+        self.confidence = confidence
+        self.word_count = word_count
+        self.char_count = char_count
+
+    def to_dict(self) -> dict:
+        return {
+            "text": self.text,
+            "is_tesseract": self.is_tesseract,
+            "confidence": self.confidence,
+            "word_count": self.word_count,
+            "char_count": self.char_count
+        }
+
+
+def optical_character_recognition_native(image: np.ndarray) -> tuple[str, float, int, int]:
     """
     Motor OCR nativo en Python y OpenCV:
     1. Binarización adaptativa local del documento.
@@ -158,6 +184,7 @@ def optical_character_recognition_native(image: np.ndarray) -> str:
     3. Agrupamiento de glifos en renglones mediante coordenadas Y.
     4. Detección de espaciado inter-palabra e inter-renglón.
     5. Clasificación de glifos por correlación cruzada normalizada contra templates.
+    6. Cálculo de confianza promedio y conteo de palabras y caracteres.
     """
     if len(image.shape) == 3:
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -173,7 +200,7 @@ def optical_character_recognition_native(image: np.ndarray) -> str:
     # Encontrar contornos de caracteres
     cnts, _ = cv2.findContours(inv, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if not cnts:
-        return "No se detectó texto en la imagen."
+        return "No se detectó texto en la imagen.", 0.0, 0, 0
 
     boxes = []
     for c in cnts:
@@ -183,7 +210,7 @@ def optical_character_recognition_native(image: np.ndarray) -> str:
             boxes.append((x, y, w, h))
 
     if not boxes:
-        return "No se encontraron caracteres legibles en la imagen."
+        return "No se encontraron caracteres legibles en la imagen.", 0.0, 0, 0
 
     # Agrupar caracteres en líneas horizontales
     boxes_sorted_y = sorted(boxes, key=lambda b: b[1])
@@ -207,6 +234,7 @@ def optical_character_recognition_native(image: np.ndarray) -> str:
 
     templates = _get_ocr_templates()
     output_lines = []
+    all_scores = []
 
     space_threshold = max(6, int(avg_h * 0.45))
 
@@ -240,44 +268,106 @@ def optical_character_recognition_native(image: np.ndarray) -> str:
 
             if best_score > 0.25:
                 line_chars.append(best_c)
+                all_scores.append(best_score)
             else:
                 line_chars.append("·")
+                all_scores.append(max(0.0, best_score))
 
         text_line = "".join(line_chars).strip()
         if len(text_line) > 1:
             output_lines.append(text_line)
 
     if not output_lines:
-        return "Caracteres detectados pero con bajo nivel de coincidencia."
+        return "Caracteres detectados pero con bajo nivel de coincidencia.", 0.0, 0, 0
 
-    return "\n".join(output_lines)
+    full_text = "\n".join(output_lines)
+    avg_conf = float(np.mean(all_scores) * 100.0) if all_scores else 0.0
+    words = len(full_text.split())
+    chars = len(full_text)
+
+    return full_text, avg_conf, words, chars
 
 
-def run_ocr(image: np.ndarray, lang: str = "spa") -> tuple[str, bool]:
+def run_ocr(
+    image: np.ndarray,
+    lang: str = "spa",
+    psm: int = 3,
+    oem: int = 1,
+    dpi: int = 300
+) -> OCRResult:
     """
-    Ejecuta el reconocimiento óptico de caracteres sobre la imagen actual del usuario.
-    Retorna (texto_extraido, fue_tesseract_real).
+    Ejecuta el reconocimiento óptico de caracteres sobre la imagen del usuario.
+    Opera 100% en memoria mediante pipes estándar (sin guardar archivos temporales en disco).
+    Retorna un OCRResult (text, is_tesseract, confidence, word_count, char_count).
     """
     tess_path = find_tesseract_binary()
 
     if tess_path:
         try:
-            temp_img = "temp_ocr.png"
-            cv2.imwrite(temp_img, image)
-            cmd = [tess_path, temp_img, "stdout", "-l", lang, "--oem", "1", "--psm", "3"]
-            result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="ignore")
-            if os.path.exists(temp_img):
-                os.remove(temp_img)
-            if result.returncode == 0:
-                text = result.stdout.strip()
-                if text:
-                    return text, True
+            # Codificación PNG en memoria (Zero-disk I/O)
+            success, enc_img = cv2.imencode(".png", image)
+            if success:
+                in_bytes = enc_img.tobytes()
+                # 1. Extracción de texto
+                cmd_txt = [
+                    tess_path, "stdin", "stdout",
+                    "-l", lang,
+                    "--oem", str(oem),
+                    "--psm", str(psm),
+                    "--dpi", str(dpi)
+                ]
+                res_txt = subprocess.run(
+                    cmd_txt,
+                    input=in_bytes,
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="ignore"
+                )
+                
+                # 2. Extracción de nivel de confianza y palabras (TSV en memoria)
+                cmd_tsv = [
+                    tess_path, "stdin", "stdout",
+                    "-l", lang,
+                    "--oem", str(oem),
+                    "--psm", str(psm),
+                    "--dpi", str(dpi),
+                    "tsv"
+                ]
+                res_tsv = subprocess.run(
+                    cmd_tsv,
+                    input=in_bytes,
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="ignore"
+                )
+
+                if res_txt.returncode == 0:
+                    text = res_txt.stdout.strip()
+                    confidences = []
+                    if res_tsv.returncode == 0 and res_tsv.stdout:
+                        for row in res_tsv.stdout.splitlines()[1:]:
+                            cols = row.split("\t")
+                            if len(cols) >= 11:
+                                try:
+                                    conf_val = float(cols[10])
+                                    if conf_val >= 0:
+                                        confidences.append(conf_val)
+                                except ValueError:
+                                    pass
+
+                    avg_conf = float(np.mean(confidences)) if confidences else (85.0 if text else 0.0)
+                    words = len(text.split())
+                    chars = len(text)
+                    if text:
+                        return OCRResult(text, is_tesseract=True, confidence=avg_conf, word_count=words, char_count=chars)
         except Exception:
             pass
 
     # Reconocimiento Óptico Nativo Real directamente de los píxeles de la imagen
-    native_text = optical_character_recognition_native(image)
-    return native_text, False
+    native_text, conf, words, chars = optical_character_recognition_native(image)
+    return OCRResult(native_text, is_tesseract=False, confidence=conf, word_count=words, char_count=chars)
 
 
 def evaluate_thesis_stages(

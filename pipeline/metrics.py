@@ -87,14 +87,14 @@ def compute_histogram(image: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return norm_hist, bins[:-1]
 
 
-def compute_all_metrics(image: np.ndarray) -> dict:
-    """Calcula todas las métricas de legibilidad para una imagen dada."""
+def compute_all_metrics(image: np.ndarray, ocr_data: dict | None = None) -> dict:
+    """Calcula todas las métricas de legibilidad visual y OCR para una imagen dada."""
     if len(image.shape) == 3:
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     else:
         gray = image
 
-    return {
+    metrics = {
         "rms_contrast": calculate_rms_contrast(gray),
         "michelson_contrast": calculate_michelson_contrast(gray),
         "sharpness": calculate_sharpness_laplacian(gray),
@@ -104,17 +104,39 @@ def compute_all_metrics(image: np.ndarray) -> dict:
         "dimensions": f"{image.shape[1]} x {image.shape[0]} px"
     }
 
+    if ocr_data is not None:
+        if hasattr(ocr_data, "word_count"):
+            metrics["ocr_words"] = int(ocr_data.word_count)
+            metrics["ocr_chars"] = int(ocr_data.char_count)
+            metrics["ocr_confidence"] = float(ocr_data.confidence)
+        elif isinstance(ocr_data, dict):
+            metrics["ocr_words"] = int(ocr_data.get("word_count", 0))
+            metrics["ocr_chars"] = int(ocr_data.get("char_count", 0))
+            metrics["ocr_confidence"] = float(ocr_data.get("confidence", 0.0))
+
+    return metrics
+
 
 def compare_metrics(original_metrics: dict, processed_metrics: dict) -> dict:
-    """Compara métricas calculando el porcentaje de cambio o mejora."""
+    """Compara métricas calculando la diferencia y el porcentaje de cambio o mejora."""
     diff = {}
-    for key in ["rms_contrast", "sharpness", "snr_db", "michelson_contrast"]:
+    keys_to_compare = [
+        "sharpness",
+        "rms_contrast",
+        "michelson_contrast",
+        "snr_db",
+        "ink_ratio_pct",
+        "ocr_words",
+        "ocr_chars",
+        "ocr_confidence"
+    ]
+    for key in keys_to_compare:
         orig = original_metrics.get(key, 0.0)
         proc = processed_metrics.get(key, 0.0)
         if orig != 0:
             change_pct = ((proc - orig) / abs(orig)) * 100.0
         else:
-            change_pct = 0.0
+            change_pct = 100.0 if proc > 0 else 0.0
         diff[key] = {
             "original": orig,
             "processed": proc,
