@@ -24,10 +24,14 @@ def order_points(pts: np.ndarray) -> np.ndarray:
     return rect
 
 
-def detect_document_contour(image: np.ndarray, max_eval_dim: int = 1200):
+def detect_document_contour(image: np.ndarray, max_eval_dim: int = 900) -> np.ndarray:
     """
     Detecta automáticamente los 4 vértices del documento en la fotografía.
-    Retorna los 4 puntos ordenados a escala completa y una máscara/imagen de depuración.
+    Emplea una estrategia multiescala combinada:
+    1. Segmentación radiométrica de fondo vs documento (periferia vs centro).
+    2. Umbralización Otsu con cierre morfológico.
+    3. Bordes Canny con dilatación controlada.
+    4. Aproximación poligonal adaptativa sobre Convex Hull y MinAreaRect de respaldo.
     """
     orig_h, orig_w = image.shape[:2]
     scale = max_eval_dim / max(orig_h, orig_w) if max(orig_h, orig_w) > max_eval_dim else 1.0
@@ -38,55 +42,100 @@ def detect_document_contour(image: np.ndarray, max_eval_dim: int = 1200):
     else:
         small = image.copy()
 
-    # Preprocesamiento para detección de contornos
+    sh, sw = small.shape[:2]
+    total_area = float(sw * sh)
+
     gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY) if len(small.shape) == 3 else small.copy()
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
 
-    # Detección de bordes con Canny + Otsu para umbral automático
-    high_thresh, _ = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    low_thresh = 0.5 * high_thresh
-    edges = cv2.Canny(blurred, low_thresh, high_thresh)
+    # 1. Muestreo de luminancia del fondo (márgenes exteriores 4%) vs centro del documento
+    margin_w = max(5, int(sw * 0.04))
+    margin_h = max(5, int(sh * 0.04))
+    bg_sample = np.concatenate([
+        gray[:margin_h, :].ravel(),
+        gray[-margin_h:, :].ravel(),
+        gray[:, :margin_w].ravel(),
+        gray[:, -margin_w:].ravel()
+    ])
+    bg_mean = float(np.mean(bg_sample))
+    center_sample = gray[int(sh * 0.25):int(sh * 0.75), int(sw * 0.25):int(sw * 0.75)]
+    center_mean = float(np.mean(center_sample))
 
-    # Dilatación y cierre morfológico para cerrar bordes discontinuos
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (7, 7))
-    closed = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel)
+    candidates = []
 
-    contours, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    contours = sorted(contours, key=cv2.contourArea, reverse=True)
+    # Estrategia A: Máscara por contraste de fondo vs papel
+    if abs(center_mean - bg_mean) > 12.0:
+        th_val = (bg_mean + center_mean) / 2.0
+        mask_bg = (blurred > th_val).astype(np.uint8) * 255 if center_mean > bg_mean else (blurred < th_val).astype(np.uint8) * 255
+        k_sz = max(7, int(min(sw, sh) * 0.03))
+        if k_sz % 2 == 0:
+            k_sz += 1
+        mask_bg = cv2.morphologyEx(mask_bg, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (k_sz, k_sz)))
+        candidates.append(mask_bg)
 
-    doc_cnt = None
-    min_area = (small.shape[0] * small.shape[1]) * 0.15  # al menos 15% del área
+    # Estrategia B: Otsu directo e invertido
+    _, otsu = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    k_sz = max(7, int(min(sw, sh) * 0.025))
+    if k_sz % 2 == 0:
+        k_sz += 1
+    otsu_closed = cv2.morphologyEx(otsu, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (k_sz, k_sz)))
+    candidates.append(otsu_closed)
+    candidates.append(cv2.bitwise_not(otsu_closed))
 
-    for cnt in contours[:5]:
-        area = cv2.contourArea(cnt)
-        if area < min_area:
-            continue
-        peri = cv2.arcLength(cnt, True)
-        approx = cv2.approxPolyDP(cnt, 0.02 * peri, True)
-        if len(approx) == 4 and cv2.isContourConvex(approx):
-            doc_cnt = approx.reshape(4, 2)
+    # Estrategia C: Canny con dilatación de bordes
+    edges = cv2.Canny(blurred, 25, 110)
+    dilated_edges = cv2.dilate(edges, cv2.getStructuringElement(cv2.MORPH_RECT, (7, 7)), iterations=2)
+    candidates.append(dilated_edges)
+
+    best_poly = None
+    best_area = 0.0
+
+    # Búsqueda de cuadrilátero convexo óptimo en las máscaras candidatas
+    for mask in candidates:
+        cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        for c in cnts:
+            area = cv2.contourArea(c)
+            if 0.12 * total_area < area < 0.98 * total_area:
+                hull = cv2.convexHull(c)
+                hull_area = cv2.contourArea(hull)
+                peri = cv2.arcLength(hull, True)
+                for eps in np.linspace(0.015, 0.08, 14):
+                    ap = cv2.approxPolyDP(hull, eps * peri, True)
+                    if len(ap) == 4 and cv2.isContourConvex(ap):
+                        if hull_area > best_area:
+                            best_area = hull_area
+                            best_poly = ap.reshape(4, 2)
+                        break
+        if best_poly is not None and best_area > 0.28 * total_area:
             break
 
-    # Si no se encontró un cuadrilátero perfecto, intentar con el rectángulo orientado de área mínima
-    if doc_cnt is None and len(contours) > 0 and cv2.contourArea(contours[0]) >= min_area:
-        rect = cv2.minAreaRect(contours[0])
-        box = cv2.boxPoints(rect)
-        doc_cnt = box
+    # Si no se encontró un cuadrilátero exacto, intentar con minAreaRect sobre el contorno dominante
+    if best_poly is None:
+        for mask in candidates:
+            cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            for c in cnts:
+                area = cv2.contourArea(c)
+                if 0.15 * total_area < area < 0.96 * total_area:
+                    rect = cv2.minAreaRect(c)
+                    best_poly = cv2.boxPoints(rect)
+                    best_area = area
+                    break
+            if best_poly is not None:
+                break
 
-    # Fallback: margen del 5% si la foto ya está recortada o el fondo es muy confuso
-    if doc_cnt is None:
-        margin_x = int(orig_w * 0.03)
-        margin_y = int(orig_h * 0.03)
+    # Fallback inteligente: documento que ocupa casi todo el encuadre (margen mínimo del 2%)
+    if best_poly is None:
+        m_x = orig_w * 0.02
+        m_y = orig_h * 0.02
         pts = np.array([
-            [margin_x, margin_y],
-            [orig_w - margin_x, margin_y],
-            [orig_w - margin_x, orig_h - margin_y],
-            [margin_x, orig_h - margin_y]
+            [m_x, m_y],
+            [orig_w - m_x, m_y],
+            [orig_w - m_x, orig_h - m_y],
+            [m_x, orig_h - m_y]
         ], dtype=np.float32)
         return order_points(pts)
 
-    # Escalar puntos a la dimensión original
-    scaled_pts = doc_cnt.astype(np.float32) / scale
+    scaled_pts = best_poly.astype(np.float32) / scale
     return order_points(scaled_pts)
 
 

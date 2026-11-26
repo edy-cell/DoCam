@@ -15,13 +15,22 @@ matplotlib.use("TkAgg")
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 
-from pipeline import (
-    DocumentProcessor,
-    compute_histogram,
-    save_image,
-    export_document_pdf,
-    export_scientific_report
-)
+try:
+    from pipeline import (
+        DocumentProcessor,
+        compute_histogram,
+        save_image,
+        export_document_pdf,
+        export_scientific_report
+    )
+except ImportError:
+    from DoCam.pipeline import (
+        DocumentProcessor,
+        compute_histogram,
+        save_image,
+        export_document_pdf,
+        export_scientific_report
+    )
 from .styles import (
     BG_DARK, SURFACE_CARD, SURFACE_INNER, SURFACE_BORDER, SURFACE_HOVER,
     ACCENT_PRIMARY, ACCENT_PRIMARY_HOVER, ACCENT_SUCCESS, ACCENT_SUCCESS_HOVER,
@@ -172,17 +181,17 @@ class DocuScanApp(tk.Tk):
         # Título del Menú
         lbl_side = tk.Label(
             self.sidebar,
-            text="FASES DEL PROCESAMIENTO",
+            text="PIPELINE AUTOMÁTICO",
             font=FONT_SUBTITLE,
             fg=TEXT_MUTED,
             bg=SURFACE_CARD,
             anchor="w"
         )
-        lbl_side.pack(fill="x", padx=14, pady=(12, 6))
+        lbl_side.pack(fill="x", padx=14, pady=(10, 4))
 
-        # Cargar Documento
+        # 1. Cargar Documento
         load_frame = tk.Frame(self.sidebar, bg=SURFACE_CARD)
-        load_frame.pack(fill="x", padx=12, pady=(0, 8))
+        load_frame.pack(fill="x", padx=12, pady=(0, 6))
 
         btn_load = tk.Button(
             load_frame,
@@ -193,15 +202,15 @@ class DocuScanApp(tk.Tk):
             activebackground="#1d4ed8",
             activeforeground=TEXT_WHITE,
             bd=0,
-            pady=6,
+            pady=7,
             cursor="hand2",
             command=self.open_file_dialog
         )
         btn_load.pack(fill="x")
 
-        # Selector de imágenes de prueba incluidas en el taller
+        # Selector de imágenes de prueba reales del taller
         sample_frame = tk.Frame(self.sidebar, bg=SURFACE_CARD)
-        sample_frame.pack(fill="x", padx=12, pady=(0, 10))
+        sample_frame.pack(fill="x", padx=12, pady=(0, 6))
 
         tk.Label(sample_frame, text="Documentos de muestra (Taller):", font=("Segoe UI", 8), fg=TEXT_MUTED, bg=SURFACE_CARD).pack(anchor="w")
         self.sample_var = tk.StringVar(value="Seleccionar documento de muestra...")
@@ -213,7 +222,7 @@ class DocuScanApp(tk.Tk):
         rot_frame = tk.Frame(self.sidebar, bg=SURFACE_CARD)
         rot_frame.pack(fill="x", padx=12, pady=(0, 6))
 
-        tk.Label(rot_frame, text="Giro de Orientación:", font=("Segoe UI", 8, "bold"), fg=TEXT_MUTED, bg=SURFACE_CARD).pack(anchor="w")
+        tk.Label(rot_frame, text="Giro de Orientación Manual:", font=("Segoe UI", 8, "bold"), fg=TEXT_MUTED, bg=SURFACE_CARD).pack(anchor="w")
 
         rot_box = tk.Frame(rot_frame, bg=SURFACE_CARD)
         rot_box.pack(fill="x", pady=2)
@@ -226,7 +235,7 @@ class DocuScanApp(tk.Tk):
             fg=TEXT_WHITE,
             bd=1,
             relief="solid",
-            pady=4,
+            pady=3,
             cursor="hand2",
             command=lambda: self.rotate_document("ccw")
         ).pack(side="left", fill="x", expand=True, padx=(0, 2))
@@ -239,7 +248,7 @@ class DocuScanApp(tk.Tk):
             fg=TEXT_WHITE,
             bd=1,
             relief="solid",
-            pady=4,
+            pady=3,
             cursor="hand2",
             command=lambda: self.rotate_document("cw")
         ).pack(side="left", fill="x", expand=True, padx=(2, 2))
@@ -252,138 +261,150 @@ class DocuScanApp(tk.Tk):
             fg=TEXT_WHITE,
             bd=1,
             relief="solid",
-            pady=4,
+            pady=3,
             cursor="hand2",
             command=lambda: self.rotate_document("180")
         ).pack(side="left", fill="x", expand=True, padx=(2, 0))
 
-        # Divisor sutil
-        tk.Frame(self.sidebar, bg=SURFACE_BORDER, height=1).pack(fill="x", padx=12, pady=4)
+        # 2. Panel de Decisiones y Optimización 100% Automática (Sin Sliders Manuales)
+        auto_box = tk.LabelFrame(
+            self.sidebar,
+            text="🧠 Optimización Automática Dinámica",
+            font=("Segoe UI", 8, "bold"),
+            fg=ACCENT_PRIMARY,
+            bg=SURFACE_CARD,
+            bd=1,
+            relief="solid"
+        )
+        auto_box.pack(fill="x", padx=12, pady=(0, 6))
 
-        # Botones de las 5 Fases de Transformación Documental
-        self.btn_phases = {}
-        phases_def = [
-            ("fase1", "📐 FASE 1: Corrección de Perspectiva", self.run_phase_1, "#0284c7"),
-            ("fase2", "🌓 FASE 2: Escala de Grises y CLAHE", self.run_phase_2, "#0369a1"),
-            ("fase3", "🧹 FASE 3: Filtrado de Ruido", self.run_phase_3, "#075985"),
-            ("fase4", "⚡ FASE 4: Umbralización Adaptativa", self.run_phase_4, "#0c4a6e"),
-            ("fase5", "🔄 FASE 5: Corrección de Inclinación", self.run_phase_5, "#164e63"),
+        tk.Label(
+            auto_box,
+            text="El sistema evalúa y selecciona automáticamente los mejores filtros según las características de cada fotografía.",
+            font=("Segoe UI", 7),
+            fg=TEXT_MUTED,
+            bg=SURFACE_CARD,
+            wraplength=275,
+            justify="left"
+        ).pack(fill="x", padx=8, pady=(4, 6))
+
+        self.auto_status_items = {}
+        auto_defs = [
+            ("orient", "🔄 Orientación", "Auto-Detección 360° (Hough/Perfiles)"),
+            ("geom", "📐 Perspectiva", "Homografía 4 vértices sin recorte"),
+            ("shadows", "🌓 Sombras", "División morfológica de fondo"),
+            ("clahe", "⚡ Contraste", "CLAHE dinámico calibrado por RMS"),
+            ("denoise", "🧹 Ruido", "Filtro preservador según SNR"),
+            ("sharp", "🔤 Nitidez", "Unsharp Masking dinámico (Tenengrad)"),
+            ("thresh", "📄 Binarización", "Segmentación adaptativa limpia"),
         ]
 
-        for code, label, cmd, col in phases_def:
-            b = tk.Button(
-                self.sidebar,
-                text=label,
-                font=FONT_BODY_BOLD,
-                bg=SURFACE_INNER,
-                fg=TEXT_WHITE,
-                activebackground=SURFACE_HOVER,
-                activeforeground=ACCENT_PRIMARY,
-                bd=1,
-                relief="solid",
-                anchor="w",
-                padx=12,
-                pady=6,
-                cursor="hand2",
-                command=cmd
-            )
-            b.pack(fill="x", padx=12, pady=3)
-            self.btn_phases[code] = b
+        for key, title, desc in auto_defs:
+            f = tk.Frame(auto_box, bg=SURFACE_CARD)
+            f.pack(fill="x", padx=8, pady=2)
+            tk.Label(f, text=f"• {title}:", font=("Segoe UI", 8, "bold"), fg=TEXT_WHITE, bg=SURFACE_CARD).pack(anchor="w")
+            lbl_desc = tk.Label(f, text=f"  {desc}", font=("Segoe UI", 7), fg=ACCENT_SUCCESS, bg=SURFACE_CARD, wraplength=270, justify="left")
+            lbl_desc.pack(anchor="w")
+            self.auto_status_items[key] = lbl_desc
 
-        # Divisor
-        tk.Frame(self.sidebar, bg=SURFACE_BORDER, height=1).pack(fill="x", padx=12, pady=6)
-
-        # Botón Flujo Completo Automático (1 solo clic)
-        self.btn_full = tk.Button(
+        # 3. Botón de Procesamiento Continuo Automático
+        self.btn_auto_continuous = tk.Button(
             self.sidebar,
-            text="🚀 FLUJO COMPLETO AUTOMÁTICO",
-            font=("Segoe UI", 10, "bold"),
-            bg=ACCENT_SUCCESS,
-            fg="#022c22",
-            activebackground=ACCENT_SUCCESS_HOVER,
+            text="⚡ PROCESAR AUTOMÁTICAMENTE\n(100% Continuo e Inteligente)",
+            font=("Segoe UI", 9, "bold"),
+            bg="#059669",
+            fg=TEXT_WHITE,
+            activebackground="#10b981",
             activeforeground=TEXT_WHITE,
             bd=0,
             pady=8,
             cursor="hand2",
-            command=self.run_full_pipeline
+            command=self.run_auto_continuous_flow
         )
-        self.btn_full.pack(fill="x", padx=12, pady=4)
+        self.btn_auto_continuous.pack(fill="x", padx=12, pady=(2, 6))
 
-        # Botones de Evaluación y Exportación
-        eval_frame = tk.Frame(self.sidebar, bg=SURFACE_CARD)
-        eval_frame.pack(fill="x", padx=12, pady=4)
+        # Botón de alternancia de Zoom/Pan sincronizado
+        self.btn_toggle_sync = tk.Button(
+            self.sidebar,
+            text="🔗 Zoom Sincronizado: ACTIVO",
+            font=("Segoe UI", 8, "bold"),
+            bg=SURFACE_INNER,
+            fg=ACCENT_SUCCESS,
+            bd=1,
+            relief="solid",
+            pady=4,
+            cursor="hand2",
+            command=self.toggle_sync_zoom
+        )
+        self.btn_toggle_sync.pack(fill="x", padx=12, pady=(0, 6))
 
-        self.btn_eval = tk.Button(
-            eval_frame,
-            text="📊 Evaluación de Legibilidad",
+        # 4. Sección de Exportación Explícita (Control dedicado del usuario)
+        export_box = tk.LabelFrame(
+            self.sidebar,
+            text="💾 Exportación Controlada por el Usuario",
+            font=("Segoe UI", 8, "bold"),
+            fg=ACCENT_PRIMARY,
+            bg=SURFACE_CARD,
+            bd=1,
+            relief="solid"
+        )
+        export_box.pack(fill="x", padx=12, pady=(0, 6))
+
+        self.btn_export_img = tk.Button(
+            export_box,
+            text="💾 Guardar Imagen Procesada...",
             font=FONT_BODY_BOLD,
             bg=SURFACE_INNER,
             fg=ACCENT_PRIMARY,
             bd=1,
             relief="solid",
-            pady=6,
+            pady=4,
             cursor="hand2",
-            command=lambda: self.switch_view_tab("metrics")
+            command=self._export_image
         )
-        self.btn_eval.pack(fill="x", pady=2)
+        self.btn_export_img.pack(fill="x", padx=8, pady=(4, 2))
 
-        self.btn_ocr = tk.Button(
-            eval_frame,
-            text="🔤 Insumo Tesis: OCR (CER & WER)",
+        self.btn_export_txt = tk.Button(
+            export_box,
+            text="📋 Guardar Texto OCR (.txt)...",
             font=FONT_BODY_BOLD,
+            bg=SURFACE_INNER,
+            fg=ACCENT_SUCCESS,
+            bd=1,
+            relief="solid",
+            pady=4,
+            cursor="hand2",
+            command=self.export_ocr_text
+        )
+        self.btn_export_txt.pack(fill="x", padx=8, pady=2)
+
+        self.btn_export_pdf = tk.Button(
+            export_box,
+            text="📄 Exportar Documento PDF A4...",
+            font=FONT_BODY,
+            bg=SURFACE_INNER,
+            fg=TEXT_WHITE,
+            bd=1,
+            relief="solid",
+            pady=4,
+            cursor="hand2",
+            command=self._export_document_pdf
+        )
+        self.btn_export_pdf.pack(fill="x", padx=8, pady=2)
+
+        self.btn_export_report = tk.Button(
+            export_box,
+            text="🎓 Informe Científico de Tesis (PDF)...",
+            font=FONT_BODY,
             bg=SURFACE_INNER,
             fg=ACCENT_WARNING,
             bd=1,
             relief="solid",
-            pady=6,
+            pady=4,
             cursor="hand2",
-            command=lambda: self.switch_view_tab("ocr")
+            command=self._export_scientific_report
         )
-        self.btn_ocr.pack(fill="x", pady=2)
-
-        self.btn_export = tk.Button(
-            eval_frame,
-            text="💾 Exportar Documento & Reporte",
-            font=FONT_BODY_BOLD,
-            bg="#3b82f6",
-            fg=TEXT_WHITE,
-            activebackground="#1d4ed8",
-            activeforeground=TEXT_WHITE,
-            bd=0,
-            pady=6,
-            cursor="hand2",
-            command=self.show_export_dialog
-        )
-        self.btn_export.pack(fill="x", pady=2)
-
-        # Panel de Parámetros Interactivo para la fase seleccionada
-        self.param_box = tk.LabelFrame(
-            self.sidebar,
-            text="Parámetros de la Fase Activa",
-            font=("Segoe UI", 8, "bold"),
-            fg=ACCENT_PRIMARY,
-            bg=SURFACE_INNER,
-            bd=1,
-            relief="solid"
-        )
-        self.param_box.pack(fill="both", expand=True, padx=12, pady=8)
-        self._build_param_controls()
-
-    def _build_param_controls(self):
-        # Contenedor dinámico de parámetros
-        self.param_container = tk.Frame(self.param_box, bg=SURFACE_INNER)
-        self.param_container.pack(fill="both", expand=True, padx=8, pady=4)
-
-        self.lbl_param_info = tk.Label(
-            self.param_container,
-            text="Seleccione una fase para ajustar sus parámetros en tiempo real.",
-            font=FONT_BODY,
-            fg=TEXT_MUTED,
-            bg=SURFACE_INNER,
-            wraplength=280,
-            justify="left"
-        )
-        self.lbl_param_info.pack(anchor="w", pady=6)
+        self.btn_export_report.pack(fill="x", padx=8, pady=(2, 4))
 
     def _build_workspace_content(self):
         # 1. Barra de Resumen de Métricas KPI en la parte superior
@@ -449,7 +470,78 @@ class DocuScanApp(tk.Tk):
         self.view_viewer.pack(fill="both", expand=True)
 
     def _build_dual_viewer(self, parent):
-        # Dos visores de Canvas interactivos lado a lado
+        # 1. Barra de control de modo de visualización para la imagen procesada
+        top_ctrl = tk.Frame(parent, bg=SURFACE_CARD, height=36, bd=1, relief="solid", highlightthickness=1, highlightbackground=SURFACE_BORDER)
+        top_ctrl.pack(fill="x", pady=(0, 4))
+
+        tk.Label(
+            top_ctrl,
+            text="Visualización de Salida:",
+            font=("Segoe UI", 9, "bold"),
+            fg=TEXT_WHITE,
+            bg=SURFACE_CARD
+        ).pack(side="left", padx=(10, 8), pady=4)
+
+        self.proc_mode = "hd"
+        self.btn_view_hd = tk.Button(
+            top_ctrl,
+            text="📄 Escáner HD (Recomendado)",
+            font=("Segoe UI", 8, "bold"),
+            bg="#0284c7",
+            fg=TEXT_WHITE,
+            bd=0,
+            padx=10,
+            pady=3,
+            cursor="hand2",
+            command=lambda: self.set_proc_view_mode("hd")
+        )
+        self.btn_view_hd.pack(side="left", padx=3, pady=4)
+
+        self.btn_view_bin = tk.Button(
+            top_ctrl,
+            text="⚡ Modo Binario Limpio",
+            font=("Segoe UI", 8, "bold"),
+            bg=SURFACE_INNER,
+            fg=TEXT_MUTED,
+            bd=0,
+            padx=10,
+            pady=3,
+            cursor="hand2",
+            command=lambda: self.set_proc_view_mode("binary")
+        )
+        self.btn_view_bin.pack(side="left", padx=3, pady=4)
+
+        # Botón de alternancia de sincronización de zoom
+        self.btn_sync_toggle = tk.Button(
+            top_ctrl,
+            text="🔗 Zoom Sincronizado: ON",
+            font=("Segoe UI", 8, "bold"),
+            bg=SURFACE_INNER,
+            fg=ACCENT_SUCCESS,
+            bd=1,
+            relief="solid",
+            padx=8,
+            pady=3,
+            cursor="hand2",
+            command=self.toggle_sync_zoom
+        )
+        self.btn_sync_toggle.pack(side="left", padx=6, pady=4)
+
+        btn_re_auto = tk.Button(
+            top_ctrl,
+            text="⚡ Re-procesar Automático",
+            font=("Segoe UI", 8, "bold"),
+            bg="#059669",
+            fg=TEXT_WHITE,
+            bd=0,
+            padx=10,
+            pady=3,
+            cursor="hand2",
+            command=self.run_auto_continuous_flow
+        )
+        btn_re_auto.pack(side="right", padx=10, pady=4)
+
+        # 2. Dos visores de Canvas interactivos lado a lado
         dual_frame = tk.Frame(parent, bg=BG_DARK)
         dual_frame.pack(fill="both", expand=True)
 
@@ -466,10 +558,144 @@ class DocuScanApp(tk.Tk):
         # Canvas Derecho: Documento Procesado
         self.canvas_proc = ZoomableImageCanvas(
             dual_frame,
-            title="DOCUMENTO EN FASE ACTUAL / PROCESADO FINAL",
+            title="DOCUMENTO PROCESADO (Escáner HD Inteligente)",
             editable_corners=False
         )
         self.canvas_proc.pack(side="right", fill="both", expand=True, padx=(4, 0))
+
+        # Vinculación bidireccional de Zoom y Paneo Sincronizado
+        self.canvas_orig.set_peer_canvas(self.canvas_proc)
+        self.canvas_proc.set_peer_canvas(self.canvas_orig)
+
+        # 3. Paneles Inferiores: Resumen de Métricas Comparativas & Reconocimiento OCR
+        bottom_box = tk.Frame(parent, bg=BG_DARK, height=185)
+        bottom_box.pack(fill="x", pady=(4, 0))
+        bottom_box.pack_propagate(False)
+
+        # Subpanel Izquierdo: Métricas Comparativas y Resumen Técnico
+        summary_card = tk.Frame(bottom_box, bg=SURFACE_CARD, bd=1, relief="solid", highlightthickness=1, highlightbackground=SURFACE_BORDER)
+        summary_card.pack(side="left", fill="both", expand=True, padx=(0, 4))
+
+        summary_header = tk.Frame(summary_card, bg=SURFACE_CARD)
+        summary_header.pack(fill="x", padx=10, pady=(4, 2))
+
+        tk.Label(
+            summary_header,
+            text="📊 Métricas Comparativas (Antes vs Después)",
+            font=("Segoe UI", 9, "bold"),
+            fg=ACCENT_PRIMARY,
+            bg=SURFACE_CARD
+        ).pack(side="left")
+
+        self.btn_toggle_view_report = tk.Button(
+            summary_header,
+            text="Ver Informe Técnico",
+            font=("Segoe UI", 7, "bold"),
+            bg=SURFACE_INNER,
+            fg=TEXT_MUTED,
+            bd=1,
+            relief="solid",
+            padx=6,
+            pady=1,
+            cursor="hand2",
+            command=self._toggle_metrics_report_view
+        )
+        self.btn_toggle_view_report.pack(side="right")
+
+        # Contenedor para tabla de métricas comparativas
+        self.frame_comp_metrics = tk.Frame(summary_card, bg=SURFACE_CARD)
+        self.frame_comp_metrics.pack(fill="both", expand=True, padx=8, pady=(0, 4))
+
+        cols = ("metrica", "original", "procesado", "delta")
+        self.tree_comp_metrics = ttk.Treeview(self.frame_comp_metrics, columns=cols, show="headings", height=5)
+        self.tree_comp_metrics.heading("metrica", text="Indicador")
+        self.tree_comp_metrics.heading("original", text="Original")
+        self.tree_comp_metrics.heading("procesado", text="Procesado")
+        self.tree_comp_metrics.heading("delta", text="Mejora Δ")
+
+        self.tree_comp_metrics.column("metrica", width=160)
+        self.tree_comp_metrics.column("original", width=90, anchor="center")
+        self.tree_comp_metrics.column("procesado", width=90, anchor="center")
+        self.tree_comp_metrics.column("delta", width=90, anchor="center")
+        self.tree_comp_metrics.pack(fill="both", expand=True)
+
+        self.txt_summary = tk.Text(
+            summary_card,
+            bg="#070a12",
+            fg="#cbd5e1",
+            font=("Consolas", 8),
+            bd=0,
+            padx=8,
+            pady=4,
+            wrap="word"
+        )
+        # Por defecto se muestra la tabla comparativa
+
+        # Subpanel Derecho: Reconocimiento OCR y Texto Extraído
+        ocr_card = tk.Frame(bottom_box, bg=SURFACE_CARD, bd=1, relief="solid", highlightthickness=1, highlightbackground=SURFACE_BORDER)
+        ocr_card.pack(side="right", fill="both", expand=True, padx=(4, 0))
+
+        ocr_header = tk.Frame(ocr_card, bg=SURFACE_CARD)
+        ocr_header.pack(fill="x", padx=10, pady=(4, 2))
+
+        tk.Label(
+            ocr_header,
+            text="🔤 Reconocimiento OCR de la Imagen",
+            font=("Segoe UI", 9, "bold"),
+            fg=ACCENT_SUCCESS,
+            bg=SURFACE_CARD
+        ).pack(side="left")
+
+        self.lbl_ocr_chars = tk.Label(
+            ocr_header,
+            text="-- caracteres",
+            font=("Segoe UI", 8),
+            fg=TEXT_MUTED,
+            bg=SURFACE_CARD
+        )
+        self.lbl_ocr_chars.pack(side="left", padx=8)
+
+        btn_save_txt = tk.Button(
+            ocr_header,
+            text="💾 Guardar .txt",
+            font=("Segoe UI", 7, "bold"),
+            bg=SURFACE_INNER,
+            fg=ACCENT_PRIMARY,
+            bd=1,
+            relief="solid",
+            padx=6,
+            pady=1,
+            cursor="hand2",
+            command=self.export_ocr_text
+        )
+        btn_save_txt.pack(side="right", padx=(2, 0))
+
+        btn_copy = tk.Button(
+            ocr_header,
+            text="📋 Copiar",
+            font=("Segoe UI", 7, "bold"),
+            bg=SURFACE_INNER,
+            fg=TEXT_WHITE,
+            bd=1,
+            relief="solid",
+            padx=6,
+            pady=1,
+            cursor="hand2",
+            command=self.copy_ocr_to_clipboard
+        )
+        btn_copy.pack(side="right", padx=2)
+
+        self.txt_ocr_preview = tk.Text(
+            ocr_card,
+            bg="#070a12",
+            fg="#f8fafc",
+            font=("Consolas", 8),
+            bd=0,
+            padx=8,
+            pady=4,
+            wrap="word"
+        )
+        self.txt_ocr_preview.pack(fill="both", expand=True, padx=8, pady=(0, 4))
 
     def _build_histogram_view(self, parent):
         lbl = tk.Label(parent, text="Distribución Radiométrica: Histograma Original vs Procesado", font=FONT_TITLE_PANEL, fg=TEXT_WHITE, bg=SURFACE_CARD)
@@ -693,12 +919,11 @@ class DocuScanApp(tk.Tk):
                 corners=self.processor.corners,
                 title=f"ORIGINAL ROTADO: {doc_name}"
             )
-            # Limpiar canvas procesado para que el usuario ejecute la fase sobre la nueva orientación
-            self.canvas_proc.set_image(None, title="DOCUMENTO EN FASE ACTUAL (Seleccione una fase)")
-            self.metrics_bar.update_metrics(self.processor.original_metrics, self.processor.original_metrics)
-
             ang_label = "90° Horario (↻)" if angle_type == "cw" else ("90° Antihorario (↺)" if angle_type == "ccw" else "180°")
-            self.lbl_status.config(text=f"Documento girado correctamente ({ang_label}). Orientación y esquinas actualizadas.")
+            self.lbl_status.config(text=f"Documento girado ({ang_label}). Ejecutando optimización automática...")
+            
+            # Ejecutar automáticamente el flujo continuo sobre la nueva orientación
+            self.run_auto_continuous_flow()
 
     def _on_sample_selected(self, event=None):
         idx = self.cb_samples.current()
@@ -736,10 +961,8 @@ class DocuScanApp(tk.Tk):
             corners=self.processor.corners,
             title=f"ORIGINAL: {fname}"
         )
-        # Limpiar canvas derecho
-        self.canvas_proc.set_image(None, title="DOCUMENTO EN FASE ACTUAL")
 
-        # Actualizar barra KPI
+        # Actualizar barra KPI con valores base
         self.metrics_bar.update_metrics(self.processor.original_metrics, self.processor.original_metrics)
 
         # Limpiar campos OCR para nuevo documento
@@ -748,154 +971,259 @@ class DocuScanApp(tk.Tk):
         if hasattr(self, 'txt_extracted'):
             self.txt_extracted.delete("1.0", "end")
 
-        if self.active_tab == "ocr":
-            self.run_ocr_thesis_benchmark()
+        # Ejecutar inmediatamente el flujo continuo inteligente
+        self.run_auto_continuous_flow()
 
-        # Restablecer botones de fase
-        self._reset_phase_buttons()
-        self.show_phase_parameters("fase1")
+    def set_proc_view_mode(self, mode: str):
+        """Alterna la visualización del visor derecho entre Escáner HD y Modo Binario."""
+        self.proc_mode = mode
+        if mode == "hd":
+            if hasattr(self, 'btn_view_hd'):
+                self.btn_view_hd.config(bg="#0284c7", fg=TEXT_WHITE)
+            if hasattr(self, 'btn_view_bin'):
+                self.btn_view_bin.config(bg=SURFACE_INNER, fg=TEXT_MUTED)
+            if self.processor.hd_image is not None:
+                self.canvas_proc.set_image(
+                    self.processor.hd_image,
+                    title="DOCUMENTO PROCESADO (Escáner HD Inteligente)"
+                )
+        elif mode == "binary":
+            if hasattr(self, 'btn_view_bin'):
+                self.btn_view_bin.config(bg="#0284c7", fg=TEXT_WHITE)
+            if hasattr(self, 'btn_view_hd'):
+                self.btn_view_hd.config(bg=SURFACE_INNER, fg=TEXT_MUTED)
+            if self.processor.binary_image is not None:
+                self.canvas_proc.set_image(
+                    self.processor.binary_image,
+                    title="DOCUMENTO PROCESADO (Modo Binario Limpio)"
+                )
 
-    def _reset_phase_buttons(self):
-        for btn in self.btn_phases.values():
-            btn.config(bg=SURFACE_INNER, fg=TEXT_WHITE)
+    def _on_clahe_slider_change(self, val):
+        try:
+            self.lbl_clahe_val.config(text=f"{float(val):.1f}")
+        except Exception:
+            pass
 
-    def _mark_phase_active(self, phase_code: str, update_parameters: bool = True):
-        self._reset_phase_buttons()
-        if phase_code in self.btn_phases:
-            self.btn_phases[phase_code].config(bg="#0369a1", fg="#ffffff")
-        if update_parameters:
-            self.show_phase_parameters(phase_code)
+    def _on_unsharp_slider_change(self, val):
+        try:
+            self.lbl_unsharp_val.config(text=f"{float(val):.2f}x")
+        except Exception:
+            pass
 
-    def _on_corners_dragged(self, new_corners):
-        """Callback cuando el usuario arrastra uno de los 4 vértices en el canvas."""
-        self.processor.corners = new_corners
-        if self.active_phase == "fase1":
-            self.run_phase_1(skip_redraw_orig=True)
+    def toggle_sync_zoom(self):
+        """Alterna el estado de sincronización bidireccional de Zoom/Pan entre visores."""
+        self.sync_active = not getattr(self, "sync_active", True)
+        self.canvas_orig.set_sync_active(self.sync_active)
+        self.canvas_proc.set_sync_active(self.sync_active)
+        if self.sync_active:
+            if hasattr(self, 'btn_toggle_sync'):
+                self.btn_toggle_sync.config(text="🔗 Zoom Sincronizado: ACTIVO", fg=ACCENT_SUCCESS)
+            if hasattr(self, 'btn_sync_toggle'):
+                self.btn_sync_toggle.config(text="🔗 Zoom Sincronizado: ON", fg=ACCENT_SUCCESS)
+            self.canvas_orig._broadcast_view()
+        else:
+            if hasattr(self, 'btn_toggle_sync'):
+                self.btn_toggle_sync.config(text="🔓 Zoom Sincronizado: INACTIVO", fg=TEXT_MUTED)
+            if hasattr(self, 'btn_sync_toggle'):
+                self.btn_sync_toggle.config(text="🔓 Zoom Sincronizado: OFF", fg=TEXT_MUTED)
 
-    # ==========================================
-    # 6. EJECUCIÓN DE FASES (ACTIVIDADES)
-    # ==========================================
-    def run_phase_1(self, skip_redraw_orig=False):
-        """Fase 1: Corrección de Perspectiva."""
+    def copy_ocr_to_clipboard(self):
+        """Copia el texto del cuadro OCR directamente al portapapeles."""
+        text = self.txt_ocr_preview.get("1.0", "end-1c") if hasattr(self, 'txt_ocr_preview') else ""
+        if not text.strip():
+            messagebox.showinfo("OCR", "No hay texto extraído disponible para copiar.")
+            return
+        self.clipboard_clear()
+        self.clipboard_append(text)
+        self.lbl_status.config(text="Texto OCR copiado al portapapeles.")
+
+    def export_ocr_text(self):
+        """Abre un diálogo filedialog explícito para guardar el texto OCR extraído."""
+        text = self.txt_ocr_preview.get("1.0", "end-1c") if hasattr(self, 'txt_ocr_preview') else ""
+        if not text.strip():
+            messagebox.showwarning("Atención", "No hay texto OCR para exportar.")
+            return
+        filetypes = [("Archivo de Texto (*.txt)", "*.txt"), ("Todos los archivos", "*.*")]
+        out_path = filedialog.asksaveasfilename(defaultextension=".txt", filetypes=filetypes, title="Guardar Texto OCR Extraído")
+        if out_path:
+            with open(out_path, "w", encoding="utf-8") as f:
+                f.write(text)
+            messagebox.showinfo("Éxito", f"Texto OCR guardado correctamente en:\n{out_path}")
+            self.lbl_status.config(text=f"Texto OCR exportado a: {os.path.basename(out_path)}")
+
+    def _toggle_metrics_report_view(self):
+        """Alterna entre la tabla comparativa de métricas y el informe técnico textual."""
+        if hasattr(self, 'txt_summary') and hasattr(self, 'frame_comp_metrics'):
+            if self.frame_comp_metrics.winfo_ismapped():
+                self.frame_comp_metrics.pack_forget()
+                self.txt_summary.pack(fill="both", expand=True, padx=8, pady=(0, 4))
+                self.btn_toggle_view_report.config(text="Ver Tabla Comparativa")
+            else:
+                self.txt_summary.pack_forget()
+                self.frame_comp_metrics.pack(fill="both", expand=True, padx=8, pady=(0, 4))
+                self.btn_toggle_view_report.config(text="Ver Informe Técnico")
+
+    def run_auto_continuous_flow(self):
+        """
+        Ejecuta el pipeline optimizado 100% automático en un solo flujo continuo:
+        - Detecta bordes y corrige perspectiva y orientación.
+        - Aplica dinámicamente división de fondo morfológica, CLAHE, reducción de ruido y unsharp.
+        - Genera imagen Escáner HD y Modo Binario limpio.
+        - Ejecuta OCR y extrae texto de la imagen de forma nativa/Tesseract.
+        - Genera resumen técnico integral de transformaciones y métricas.
+        """
         if self.processor.original_image is None:
-            messagebox.showwarning("Atención", "Cargue primero un documento.")
+            messagebox.showwarning("Atención", "Cargue primero una fotografía de documento.")
             return
 
+        self.lbl_status.config(text="Procesando documento automáticamente en flujo continuo inteligente...")
+        self.update_idletasks()
+
+        # Ejecución 100% Automática: El motor decide los mejores filtros y parámetros
         t0 = time.time()
-        warped = self.processor.run_phase_1_perspective()
+        res = self.processor.process_automatic_continuous()
         elapsed = (time.time() - t0) * 1000
 
-        self.active_phase = "fase1"
-        self._mark_phase_active("fase1")
+        # Actualizar diagnóstico de decisiones automáticas
+        if hasattr(self, 'auto_status_items'):
+            angle = res.get("technical_summary", {}).get("angle", 0.0)
+            orig_sharp = self.processor.original_metrics.get("sharpness", 0.0)
+            rms = self.processor.original_metrics.get("rms_contrast", 0.0)
+            snr = self.processor.original_metrics.get("snr_db", 0.0)
 
-        if not skip_redraw_orig:
-            self.canvas_orig.set_corners(self.processor.corners)
+            if "orient" in self.auto_status_items:
+                self.auto_status_items["orient"].config(text=f"  ✓ Orientación calibrada ({angle:.2f}°)")
+            if "clahe" in self.auto_status_items:
+                self.auto_status_items["clahe"].config(text=f"  ✓ CLAHE adaptativo (RMS {rms:.3f})")
+            if "sharp" in self.auto_status_items:
+                self.auto_status_items["sharp"].config(text=f"  ✓ Realce ajustado ({orig_sharp:.1f} var)")
+            if "denoise" in self.auto_status_items:
+                self.auto_status_items["denoise"].config(text=f"  ✓ Filtro según SNR ({snr:.1f} dB)")
 
-        self.canvas_proc.set_image(warped, title="FASE 1: Perspectiva Corregida (Vista Frontal Orto-rectificada)")
-        self.lbl_status.config(text="Fase 1 completada: Perspectiva corregida mediante homografía proyectiva.")
-        self.lbl_time.config(text=f"Fase 1: {elapsed:.1f} ms")
-        self._update_all_views()
-
-    def run_phase_2(self):
-        """Fase 2: Escala de Grises y CLAHE."""
-        if self.processor.original_image is None:
-            messagebox.showwarning("Atención", "Cargue primero un documento.")
-            return
-
-        t0 = time.time()
-        enhanced = self.processor.run_phase_2_clahe()
-        elapsed = (time.time() - t0) * 1000
-
-        self.active_phase = "fase2"
-        self._mark_phase_active("fase2")
-
-        self.canvas_proc.set_image(enhanced, title="FASE 2: Escala de Grises y CLAHE (Mejora de Contraste Local)")
-        self.lbl_status.config(text="Fase 2 completada: Contraste local acentuado sin amplificar ruido de fondo.")
-        self.lbl_time.config(text=f"Fase 2: {elapsed:.1f} ms")
-        self._update_all_views()
-
-    def run_phase_3(self):
-        """Fase 3: Filtrado de Ruido."""
-        if self.processor.original_image is None:
-            messagebox.showwarning("Atención", "Cargue primero un documento.")
-            return
-
-        t0 = time.time()
-        denoised = self.processor.run_phase_3_denoise()
-        elapsed = (time.time() - t0) * 1000
-
-        self.active_phase = "fase3"
-        self._mark_phase_active("fase3")
-
-        self.canvas_proc.set_image(denoised, title="FASE 3: Filtrado de Ruido (Preservación de Bordes de Texto)")
-        self.lbl_status.config(text="Fase 3 completada: Texturas del papel atenuadas y bordes tipográficos preservados.")
-        self.lbl_time.config(text=f"Fase 3: {elapsed:.1f} ms")
-        self._update_all_views()
-
-    def run_phase_4(self):
-        """Fase 4: Umbralización Adaptativa."""
-        if self.processor.original_image is None:
-            messagebox.showwarning("Atención", "Cargue primero un documento.")
-            return
-
-        t0 = time.time()
-        binary = self.processor.run_phase_4_threshold()
-        elapsed = (time.time() - t0) * 1000
-
-        self.active_phase = "fase4"
-        self._mark_phase_active("fase4")
-
-        self.canvas_proc.set_image(binary, title="FASE 4: Umbralización Adaptativa (Eliminación Total de Sombras)")
-        self.lbl_status.config(text="Fase 4 completada: Binarización adaptativa aplicada. Sombras de iluminación eliminadas.")
-        self.lbl_time.config(text=f"Fase 4: {elapsed:.1f} ms")
-        self._update_all_views()
-
-    def run_phase_5(self):
-        """Fase 5: Corrección de Inclinación."""
-        if self.processor.original_image is None:
-            messagebox.showwarning("Atención", "Cargue primero un documento.")
-            return
-
-        t0 = time.time()
-        corrected, angle = self.processor.run_phase_5_deskew()
-        elapsed = (time.time() - t0) * 1000
-
-        self.active_phase = "fase5"
-        self._mark_phase_active("fase5")
-
-        self.canvas_proc.set_image(corrected, title=f"FASE 5: Deskew Final (Ángulo Corregido: {angle:.2f}°)")
-        self.lbl_status.config(text=f"Fase 5 completada: Renglones alineados horizontalmente (Giro: {angle:.2f}°).")
-        self.lbl_time.config(text=f"Fase 5: {elapsed:.1f} ms")
-        self._update_all_views()
-
-    def run_full_pipeline(self):
-        """Ejecuta el pipeline completo de principio a fin."""
-        if self.processor.original_image is None:
-            messagebox.showwarning("Atención", "Cargue primero un documento.")
-            return
-
-        t0 = time.time()
-        final_img = self.processor.run_full_pipeline()
-        elapsed = (time.time() - t0) * 1000
-
-        self.active_phase = "fase5"
-        self._mark_phase_active("fase5")
+        # Actualizar visores según modo activo
+        if getattr(self, "proc_mode", "hd") == "binary" and res.get("binary_image") is not None:
+            self.canvas_proc.set_image(res["binary_image"], title="DOCUMENTO PROCESADO (Modo Binario Limpio)")
+        else:
+            self.canvas_proc.set_image(res.get("hd_image"), title="DOCUMENTO PROCESADO (Escáner HD Inteligente)")
 
         self.canvas_orig.set_corners(self.processor.corners)
-        self.canvas_proc.set_image(
-            final_img,
-            title=f"FLUJO COMPLETO FINALIZADO (Ángulo Deskew: {self.processor.deskew_angle:.2f}°)"
-        )
-        self.lbl_status.config(text="Flujo completo ejecutado exitosamente: Perspectiva -> CLAHE -> Filtro -> Umbral -> Deskew.")
-        self.lbl_time.config(text=f"Flujo Total: {elapsed:.1f} ms")
-        self._update_all_views()
+
+        # Actualizar barra KPI superior
+        self.metrics_bar.update_metrics(self.processor.original_metrics, self.processor.processed_metrics)
+
+        # Actualizar tabla comparativa de métricas en el panel inferior
+        if hasattr(self, 'tree_comp_metrics'):
+            for item in self.tree_comp_metrics.get_children():
+                self.tree_comp_metrics.delete(item)
+
+            orig = self.processor.original_metrics
+            proc = self.processor.processed_metrics
+            comp = self.processor.comparison_metrics
+
+            sharp_orig = orig.get("sharpness", 0.0)
+            sharp_proc = proc.get("sharpness", 0.0)
+            sharp_delta = comp.get("sharpness", {}).get("delta_pct", 0.0)
+
+            rms_orig = orig.get("rms_contrast", 0.0)
+            rms_proc = proc.get("rms_contrast", 0.0)
+            rms_delta = comp.get("rms_contrast", {}).get("delta_pct", 0.0)
+
+            snr_orig = orig.get("snr_db", 0.0)
+            snr_proc = proc.get("snr_db", 0.0)
+            snr_diff = proc.get("snr_db", 0.0) - orig.get("snr_db", 0.0)
+
+            conf_orig = orig.get("ocr_confidence", 0.0)
+            conf_proc = proc.get("ocr_confidence", 0.0)
+            conf_delta = comp.get("ocr_confidence", {}).get("delta_pct", 0.0)
+
+            words_orig = orig.get("ocr_words", 0)
+            words_proc = proc.get("ocr_words", 0)
+
+            chars_orig = orig.get("ocr_chars", 0)
+            chars_proc = proc.get("ocr_chars", 0)
+
+            comp_rows = [
+                ("Nitidez (Laplaciano)", f"{sharp_orig:.1f}", f"{sharp_proc:.1f}", f"{'+' if sharp_delta>=0 else ''}{sharp_delta:.1f}%"),
+                ("Contraste RMS", f"{rms_orig:.3f}", f"{rms_proc:.3f}", f"{'+' if rms_delta>=0 else ''}{rms_delta:.1f}%"),
+                ("Relación Señal/Ruido", f"{snr_orig:.1f} dB", f"{snr_proc:.1f} dB", f"{'+' if snr_diff>=0 else ''}{snr_diff:.1f} dB"),
+                ("Confianza OCR Prom.", f"{conf_orig:.1f}%", f"{conf_proc:.1f}%", f"{'+' if conf_delta>=0 else ''}{conf_delta:.1f}%"),
+                ("Palabras Detectadas", f"{words_orig}", f"{words_proc}", f"+{max(0, words_proc - words_orig)}"),
+                ("Caracteres Detectados", f"{chars_orig}", f"{chars_proc}", f"+{max(0, chars_proc - chars_orig)}"),
+            ]
+
+            for row in comp_rows:
+                self.tree_comp_metrics.insert("", "end", values=row)
+
+        # Actualizar panel inferior: Resumen Técnico
+        if hasattr(self, 'txt_summary'):
+            self.txt_summary.delete("1.0", "end")
+            self.txt_summary.insert("1.0", res.get("report_text", ""))
+
+        # Actualizar panel inferior: OCR Preview
+        if hasattr(self, 'txt_ocr_preview'):
+            self.txt_ocr_preview.delete("1.0", "end")
+            self.txt_ocr_preview.insert("1.0", res.get("extracted_text", ""))
+
+        if hasattr(self, 'lbl_ocr_chars'):
+            c_len = len(res.get("extracted_text", ""))
+            is_tess = res.get("technical_summary", {}).get("is_tesseract", False)
+            engine = "Tesseract" if is_tess else "Nativo"
+            self.lbl_ocr_chars.config(text=f"{c_len} caracteres ({engine})")
+
+        # Actualizar pestaña de OCR de tesis
+        if hasattr(self, 'txt_extracted'):
+            self.txt_extracted.delete("1.0", "end")
+            self.txt_extracted.insert("1.0", res.get("extracted_text", ""))
+        if hasattr(self, 'txt_reference'):
+            if not self.txt_reference.get("1.0", "end-1c").strip():
+                self.txt_reference.delete("1.0", "end")
+                self.txt_reference.insert("1.0", res.get("extracted_text", ""))
+
+        # Actualizar tabla de OCR
+        if hasattr(self, 'tree_ocr') and res.get("ocr_results"):
+            for item in self.tree_ocr.get_children():
+                self.tree_ocr.delete(item)
+            conclusions = [
+                "Línea base: Alto error por sombras y perspectiva",
+                "Mejora moderada: Letras tenues se vuelven legibles",
+                "Gran reducción de error: Sombras eliminadas por binarización",
+                "Óptimo: Renglones ortogonales y nítidos maximizan exactitud"
+            ]
+            for idx, r in enumerate(res["ocr_results"]):
+                concl = conclusions[idx] if idx < len(conclusions) else "Completado"
+                self.tree_ocr.insert(
+                    "",
+                    "end",
+                    values=(
+                        r["stage"],
+                        f"{r['cer_pct']:.2f}%",
+                        f"{r['wer_pct']:.2f}%",
+                        f"{r['accuracy_pct']:.2f}%",
+                        concl
+                    )
+                )
+
+        if self.active_tab == "histogram":
+            self.update_histogram_plot()
+        elif self.active_tab == "metrics":
+            self.update_metrics_table()
+
+        self.lbl_status.config(text="Procesamiento continuo completado: Perspectiva, Sombras, Nitidez y OCR automáticos.")
+        self.lbl_time.config(text=f"Flujo Automático: {elapsed:.1f} ms")
+
+    def _on_corners_dragged(self, new_corners):
+        """Callback cuando el usuario arrastra manualmente uno de los 4 vértices en el visor izquierdo."""
+        self.processor.corners = new_corners
+        self.run_auto_continuous_flow()
 
     def _update_all_views(self):
         latest = self.processor.get_latest_processed_image()
         if latest is not None:
             self.processor.processed_metrics = self.processor.processed_metrics or {}
-            # Recalcular métricas actuales
-            from pipeline.metrics import compute_all_metrics
+            try:
+                from pipeline.metrics import compute_all_metrics
+            except ImportError:
+                from DoCam.pipeline.metrics import compute_all_metrics
             self.processor.processed_metrics = compute_all_metrics(latest)
             self.metrics_bar.update_metrics(self.processor.original_metrics, self.processor.processed_metrics)
 
@@ -905,271 +1233,7 @@ class DocuScanApp(tk.Tk):
                 self.update_metrics_table()
 
     # ==========================================
-    # 7. PARÁMETROS INTERACTIVOS POR FASE
-    # ==========================================
-    def show_phase_parameters(self, phase_code: str, force: bool = False):
-        """Muestra los controles específicos para calibrar la fase seleccionada sin parpadeos."""
-        if not force and getattr(self, "_current_param_phase", None) == phase_code:
-            return
-        self._current_param_phase = phase_code
-
-        for w in self.param_container.winfo_children():
-            w.destroy()
-
-        if phase_code == "fase1":
-            tk.Label(self.param_container, text="Ajuste de Esquinas:", font=FONT_BODY_BOLD, fg=TEXT_WHITE, bg=SURFACE_INNER).pack(anchor="w")
-            tk.Label(
-                self.param_container,
-                text="• Arrastre los 4 vértices directamente en la foto de la izquierda para calibrar los bordes.",
-                font=("Segoe UI", 8),
-                fg=TEXT_MUTED,
-                bg=SURFACE_INNER,
-                wraplength=270,
-                justify="left"
-            ).pack(anchor="w", pady=4)
-
-            btn_re_detect = tk.Button(
-                self.param_container,
-                text="🔄 Re-detectar Automáticamente",
-                font=FONT_BODY,
-                bg=SURFACE_CARD,
-                fg=ACCENT_PRIMARY,
-                bd=1,
-                relief="solid",
-                pady=4,
-                cursor="hand2",
-                command=lambda: [setattr(self.processor, 'corners', None), self.run_phase_1()]
-            )
-            btn_re_detect.pack(fill="x", pady=6)
-
-        elif phase_code == "fase2":
-            tk.Label(self.param_container, text="Parámetros CLAHE:", font=FONT_BODY_BOLD, fg=TEXT_WHITE, bg=SURFACE_INNER).pack(anchor="w")
-
-            # Clip Limit Slider
-            tk.Label(self.param_container, text="Clip Limit (Límite de contraste):", font=FONT_BODY, fg=TEXT_MUTED, bg=SURFACE_INNER).pack(anchor="w", pady=(4, 0))
-            self.slider_clip = tk.Scale(
-                self.param_container,
-                from_=1.0,
-                to=6.0,
-                resolution=0.5,
-                orient="horizontal",
-                bg=SURFACE_INNER,
-                fg=TEXT_WHITE,
-                highlightthickness=0,
-                troughcolor="#0f172a",
-                command=self._on_clahe_slider_change
-            )
-            self.slider_clip.set(self.processor.params["clahe"]["clip_limit"])
-            self.slider_clip.pack(fill="x")
-
-            # Tile Size Slider
-            tk.Label(self.param_container, text="Tamaño de Malla (Grid):", font=FONT_BODY, fg=TEXT_MUTED, bg=SURFACE_INNER).pack(anchor="w", pady=(4, 0))
-            self.slider_tile = tk.Scale(
-                self.param_container,
-                from_=4,
-                to=16,
-                resolution=2,
-                orient="horizontal",
-                bg=SURFACE_INNER,
-                fg=TEXT_WHITE,
-                highlightthickness=0,
-                troughcolor="#0f172a",
-                command=self._on_clahe_slider_change
-            )
-            self.slider_tile.set(self.processor.params["clahe"]["tile_size"])
-            self.slider_tile.pack(fill="x")
-
-            btn_apply = tk.Button(
-                self.param_container,
-                text="Aplicar CLAHE",
-                font=FONT_BODY_BOLD,
-                bg=ACCENT_PRIMARY,
-                fg="#0f172a",
-                bd=0,
-                pady=4,
-                cursor="hand2",
-                command=lambda: [
-                    self.processor.run_phase_2_clahe(clip_limit=self.slider_clip.get(), tile_size=self.slider_tile.get()),
-                    self.run_phase_2()
-                ]
-            )
-            btn_apply.pack(fill="x", pady=8)
-
-        elif phase_code == "fase3":
-            tk.Label(self.param_container, text="Algoritmo de Filtrado de Ruido:", font=FONT_BODY_BOLD, fg=TEXT_WHITE, bg=SURFACE_INNER).pack(anchor="w")
-            self.filter_var = tk.StringVar(value=self.processor.params["denoise"].get("method", "wiener"))
-
-            for m_val, m_lbl in [
-                ("wiener", "Filtro de Wiener (Desconvolución FFT)"),
-                ("bilateral", "Bilateral (Conserva bordes)"),
-                ("gaussian", "Gaussiano (Suave)"),
-                ("median", "Mediana (Sal y Pimienta)")
-            ]:
-                tk.Radiobutton(
-                    self.param_container,
-                    text=m_lbl,
-                    value=m_val,
-                    variable=self.filter_var,
-                    font=FONT_BODY,
-                    fg=TEXT_WHITE,
-                    bg=SURFACE_INNER,
-                    selectcolor="#0f172a",
-                    activebackground=SURFACE_INNER,
-                    activeforeground=TEXT_WHITE,
-                    command=lambda: self.show_phase_parameters("fase3", force=True)
-                ).pack(anchor="w")
-
-            curr_m = self.filter_var.get()
-            if curr_m == "wiener":
-                # K slider con respuesta interactiva inmediata
-                tk.Label(self.param_container, text="Parámetro K (Relación Ruido/Señal):", font=FONT_BODY, fg=TEXT_MUTED, bg=SURFACE_INNER).pack(anchor="w", pady=(4, 0))
-                self.slider_k = tk.Scale(
-                    self.param_container,
-                    from_=0.001,
-                    to=0.100,
-                    resolution=0.002,
-                    orient="horizontal",
-                    bg=SURFACE_INNER,
-                    fg=TEXT_WHITE,
-                    highlightthickness=0,
-                    troughcolor="#0f172a",
-                    command=self._on_wiener_slider_change
-                )
-                self.slider_k.set(self.processor.params["denoise"].get("k", 0.02))
-                self.slider_k.pack(fill="x")
-
-                # PSF Size slider con respuesta interactiva inmediata
-                tk.Label(self.param_container, text="Tamaño PSF (Molde desenfoque h):", font=FONT_BODY, fg=TEXT_MUTED, bg=SURFACE_INNER).pack(anchor="w", pady=(4, 0))
-                self.slider_psf_size = tk.Scale(
-                    self.param_container,
-                    from_=3,
-                    to=15,
-                    resolution=2,
-                    orient="horizontal",
-                    bg=SURFACE_INNER,
-                    fg=TEXT_WHITE,
-                    highlightthickness=0,
-                    troughcolor="#0f172a",
-                    command=self._on_wiener_slider_change
-                )
-                self.slider_psf_size.set(self.processor.params["denoise"].get("psf_size", 5))
-                self.slider_psf_size.pack(fill="x")
-
-                # PSF Sigma slider con respuesta interactiva inmediata
-                tk.Label(self.param_container, text="Sigma PSF (Dispersión):", font=FONT_BODY, fg=TEXT_MUTED, bg=SURFACE_INNER).pack(anchor="w", pady=(4, 0))
-                self.slider_psf_sigma = tk.Scale(
-                    self.param_container,
-                    from_=0.5,
-                    to=3.0,
-                    resolution=0.1,
-                    orient="horizontal",
-                    bg=SURFACE_INNER,
-                    fg=TEXT_WHITE,
-                    highlightthickness=0,
-                    troughcolor="#0f172a",
-                    command=self._on_wiener_slider_change
-                )
-                self.slider_psf_sigma.set(self.processor.params["denoise"].get("psf_sigma", 1.2))
-                self.slider_psf_sigma.pack(fill="x")
-
-                # Cuadro explicativo del modelo de Wiener
-                tk.Label(
-                    self.param_container,
-                    text="⚡ Modelo: g = h * f + n (En tiempo real)\nF(u,v) = [ H*(u,v) / (|H(u,v)|² + K) ] · G(u,v)\n• Mueva las barras para ver el cambio directo.\n• K bajo = filtro inverso; K alto = mayor suavizado.",
-                    font=("Segoe UI", 7, "italic"),
-                    fg="#38bdf8",
-                    bg="#0f172a",
-                    padx=6,
-                    pady=4,
-                    justify="left"
-                ).pack(fill="x", pady=4)
-
-            btn_apply = tk.Button(
-                self.param_container,
-                text="Aplicar Filtrado",
-                font=FONT_BODY_BOLD,
-                bg=ACCENT_PRIMARY,
-                fg="#0f172a",
-                bd=0,
-                pady=4,
-                cursor="hand2",
-                command=self._apply_phase_3_from_gui
-            )
-            btn_apply.pack(fill="x", pady=8)
-
-        elif phase_code == "fase4":
-            tk.Label(self.param_container, text="Algoritmo de Binarización:", font=FONT_BODY_BOLD, fg=TEXT_WHITE, bg=SURFACE_INNER).pack(anchor="w")
-            self.thresh_var = tk.StringVar(value=self.processor.params["threshold"]["method"])
-            for t_val, t_lbl in [
-                ("sauvola", "Sauvola (Estándar de Oro Tesis)"),
-                ("adaptive_gaussian", "Adaptativo Gaussiano (OpenCV)"),
-                ("otsu", "Otsu (Umbral Global Óptimo)"),
-                ("adaptive_mean", "Adaptativo Media Local")
-            ]:
-                tk.Radiobutton(
-                    self.param_container,
-                    text=t_lbl,
-                    value=t_val,
-                    variable=self.thresh_var,
-                    font=FONT_BODY,
-                    fg=TEXT_WHITE,
-                    bg=SURFACE_INNER,
-                    selectcolor="#0f172a",
-                    activebackground=SURFACE_INNER,
-                    activeforeground=TEXT_WHITE
-                ).pack(anchor="w")
-
-            btn_apply = tk.Button(
-                self.param_container,
-                text="Aplicar Umbralización",
-                font=FONT_BODY_BOLD,
-                bg=ACCENT_PRIMARY,
-                fg="#0f172a",
-                bd=0,
-                pady=4,
-                cursor="hand2",
-                command=lambda: [
-                    self.processor.run_phase_4_threshold(method=self.thresh_var.get()),
-                    self.run_phase_4()
-                ]
-            )
-            btn_apply.pack(fill="x", pady=8)
-
-        elif phase_code == "fase5":
-            tk.Label(self.param_container, text="Detección de Inclinación:", font=FONT_BODY_BOLD, fg=TEXT_WHITE, bg=SURFACE_INNER).pack(anchor="w")
-            self.deskew_var = tk.StringVar(value=self.processor.params["deskew"]["method"])
-            for d_val, d_lbl in [("hough", "Transformada de Hough"), ("min_area", "Rectángulo Mínimo de Texto")]:
-                tk.Radiobutton(
-                    self.param_container,
-                    text=d_lbl,
-                    value=d_val,
-                    variable=self.deskew_var,
-                    font=FONT_BODY,
-                    fg=TEXT_WHITE,
-                    bg=SURFACE_INNER,
-                    selectcolor="#0f172a",
-                    activebackground=SURFACE_INNER,
-                    activeforeground=TEXT_WHITE
-                ).pack(anchor="w")
-
-            btn_apply = tk.Button(
-                self.param_container,
-                text="Aplicar Deskew",
-                font=FONT_BODY_BOLD,
-                bg=ACCENT_PRIMARY,
-                fg="#0f172a",
-                bd=0,
-                pady=4,
-                cursor="hand2",
-                command=lambda: [
-                    self.processor.run_phase_5_deskew(method=self.deskew_var.get()),
-                    self.run_phase_5()
-                ]
-            )
-            btn_apply.pack(fill="x", pady=8)
-
-    # ==========================================
-    # 8. GRÁFICAS DE HISTOGRAMAS (MATPLOTLIB)
+    # 7. GRÁFICAS DE HISTOGRAMAS (MATPLOTLIB)
     # ==========================================
     def update_histogram_plot(self):
         if self.processor.original_image is None:
@@ -1234,101 +1298,15 @@ class DocuScanApp(tk.Tk):
 
             self.tree_metrics.insert("", "end", values=(ind, val_o, val_p, delta_str, desc))
 
-    def _on_wiener_slider_change(self, value=None):
-        """Disparado inmediatamente al mover cualquiera de las barras interactivas de Wiener."""
-        if hasattr(self, "_wiener_timer") and self._wiener_timer:
-            try:
-                self.after_cancel(self._wiener_timer)
-            except Exception:
-                pass
-        self._wiener_timer = self.after(35, self._apply_wiener_live)
-
-    def _apply_wiener_live(self):
-        """Aplica el filtro de Wiener en tiempo real sobre el visor derecho."""
-        self._wiener_timer = None
-        if self.processor.original_image is None:
-            return
-
-        try:
-            k_val = getattr(self, "slider_k", None)
-            k = float(k_val.get()) if k_val else 0.02
-            psf_size_val = getattr(self, "slider_psf_size", None)
-            psf_size = int(round(float(psf_size_val.get()))) if psf_size_val else 5
-            if psf_size % 2 == 0:
-                psf_size += 1
-            psf_sigma_val = getattr(self, "slider_psf_sigma", None)
-            psf_sigma = float(psf_sigma_val.get()) if psf_sigma_val else 1.2
-
-            self.processor.params["denoise"].update({
-                "method": "wiener",
-                "k": k,
-                "psf_size": psf_size,
-                "psf_sigma": psf_sigma
-            })
-
-            denoised = self.processor.run_phase_3_denoise(
-                method="wiener",
-                k=k,
-                psf_size=psf_size,
-                psf_sigma=psf_sigma
-            )
-
-            self.active_phase = "fase3"
-            self._mark_phase_active("fase3", update_parameters=False)
-
-            self.canvas_proc.set_image(
-                denoised,
-                title=f"FASE 3: Filtro Wiener en Vivo (K={k:.3f}, PSF={psf_size}px, σ={psf_sigma:.1f})"
-            )
-            self.lbl_status.config(
-                text=f"Wiener interactivo: K={k:.3f} | Molde PSF={psf_size}x{psf_size}px | Sigma={psf_sigma:.1f}"
-            )
-            self._update_all_views()
-        except Exception as e:
-            print(f"Error en Wiener interactivo: {e}")
-
-    def _on_clahe_slider_change(self, value=None):
-        """Disparado en tiempo real al mover barras de CLAHE."""
-        if hasattr(self, "_clahe_timer") and self._clahe_timer:
-            try:
-                self.after_cancel(self._clahe_timer)
-            except Exception:
-                pass
-        self._clahe_timer = self.after(35, self._apply_clahe_live)
-
-    def _apply_clahe_live(self):
-        self._clahe_timer = None
-        if self.processor.original_image is None:
-            return
-        try:
-            clip = float(self.slider_clip.get())
-            tile = int(round(float(self.slider_tile.get())))
-            self.processor.params["clahe"]["clip_limit"] = clip
-            self.processor.params["clahe"]["tile_size"] = tile
-            enhanced = self.processor.run_phase_2_clahe(clip_limit=clip, tile_size=tile)
-            self.active_phase = "fase2"
-            self._mark_phase_active("fase2", update_parameters=False)
-            self.canvas_proc.set_image(enhanced, title=f"FASE 2: CLAHE en Vivo (Clip={clip:.1f}, Grid={tile}x{tile})")
-            self._update_all_views()
-        except Exception as e:
-            print(f"Error CLAHE interactivo: {e}")
-
-    def _apply_phase_3_from_gui(self):
-        """Aplica la configuración de Fase 3 (Wiener o filtros espaciales)."""
-        m = self.filter_var.get()
-        if m == "wiener":
-            self._apply_wiener_live()
-        else:
-            self.processor.params["denoise"]["method"] = m
-            self.processor.run_phase_3_denoise(method=m)
-            self.run_phase_3()
-
     def browse_tesseract_path(self):
         """Permite al usuario seleccionar la ruta de tesseract.exe en su equipo."""
         filetypes = [("Ejecutable de Tesseract", "tesseract.exe"), ("Todos los ejecutables", "*.exe")]
         path = filedialog.askopenfilename(title="Seleccionar ejecutable tesseract.exe", filetypes=filetypes)
         if path and os.path.isfile(path):
-            from pipeline.ocr import set_custom_tesseract_path
+            try:
+                from pipeline.ocr import set_custom_tesseract_path
+            except ImportError:
+                from DoCam.pipeline.ocr import set_custom_tesseract_path
             set_custom_tesseract_path(path)
             messagebox.showinfo("Tesseract Vinculado", f"Tesseract configurado correctamente:\n{path}")
             self.run_ocr_thesis_benchmark(force_refresh_ref=True)
